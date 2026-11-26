@@ -306,6 +306,17 @@ export async function getCustomerAppointments(
   };
 }
 
+export async function getAppointmentById(id: string): Promise<AppointmentDTO | null> {
+  if (!Types.ObjectId.isValid(id)) return null;
+  const doc = (await Appointment.findById(id)
+    .populate("business", "name")
+    .populate("service", "name")
+    .populate("customer", "name")
+    .lean()) as unknown as LeanAppointment | null;
+  if (!doc) return null;
+  return toAppointmentDTO(doc, await reviewedIdsFor([doc._id]));
+}
+
 export async function getOwnerAppointments(
   ownerId: string,
   options: { date?: string; businessId?: string; status?: string },

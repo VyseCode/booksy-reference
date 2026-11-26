@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
 import { getBusinessById } from "@/lib/queries";
+import { BookingPanel } from "@/components/BookingPanel";
 
 export default async function BusinessDetailPage({
   params,
@@ -56,6 +57,11 @@ export default async function BusinessDetailPage({
             ))}
           </ul>
         )}
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold text-slate-800">Book an appointment</h2>
+        <BookingPanel businessId={business.id} services={business.services} />
       </div>
 
       {business.isOwner && (
