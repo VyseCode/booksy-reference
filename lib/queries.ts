@@ -227,8 +227,8 @@ export async function applyReviewDelta(
   await Business.updateOne({ _id: businessId }, [
     {
       $set: {
-        ratingSum: { $add: ["$ratingSum", ratingDelta] },
-        ratingCount: { $add: ["$ratingCount", countDelta] },
+        ratingSum: { $max: [0, { $add: ["$ratingSum", ratingDelta] }] },
+        ratingCount: { $max: [0, { $add: ["$ratingCount", countDelta] }] },
       },
     },
     {
@@ -242,7 +242,7 @@ export async function applyReviewDelta(
         },
       },
     },
-  ]);
+  ], { updatePipeline: true });
 }
 
 function toAppointmentDTO(

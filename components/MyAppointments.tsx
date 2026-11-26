@@ -17,6 +17,9 @@ export function MyAppointments({
   const [items, setItems] = useState(initial.items);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState("");
+  const [reviewOpenId, setReviewOpenId] = useState("");
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
 
   async function cancel(appointment: AppointmentDTO) {
     setError("");
@@ -40,6 +43,32 @@ export function MyAppointments({
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not cancel");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function submitReview(appointment: AppointmentDTO) {
+    setError("");
+    setBusyId(appointment.id);
+    try {
+      const response = await fetch("/api/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appointmentId: appointment.id, rating, comment }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Could not submit review");
+      setItems((current) =>
+        current.map((item) =>
+          item.id === appointment.id ? { ...item, hasReview: true } : item,
+        ),
+      );
+      setReviewOpenId("");
+      setComment("");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not submit review");
     } finally {
       setBusyId("");
     }
@@ -113,9 +142,52 @@ export function MyAppointments({
                   </button>
                 )}
                 {appointment.status === "completed" && (
-                  <span className="text-xs text-slate-500">
-                    {appointment.hasReview ? "You reviewed this visit" : "You can review this visit"}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {appointment.hasReview ? (
+                      <span className="text-xs text-slate-500">You reviewed this visit</span>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setReviewOpenId(appointment.id)}
+                          className="rounded-full border border-[#7c3aed] px-3 py-1.5 text-xs font-semibold text-[#7c3aed]"
+                        >
+                          Write a review
+                        </button>
+                        {reviewOpenId === appointment.id && (
+                          <div className="flex flex-wrap items-center gap-2 rounded-md bg-slate-50 p-2">
+                            <select
+                              aria-label="Rating"
+                              value={rating}
+                              onChange={(event) => setRating(Number(event.target.value))}
+                              className="rounded border border-slate-300 px-2 py-1 text-sm"
+                            >
+                              {[5, 4, 3, 2, 1].map((value) => (
+                                <option key={value} value={value}>
+                                  {value} stars
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              aria-label="Review comment"
+                              placeholder="How was it?"
+                              value={comment}
+                              onChange={(event) => setComment(event.target.value)}
+                              className="rounded border border-slate-300 px-2 py-1 text-sm"
+                            />
+                            <button
+                              type="button"
+                              disabled={busyId === appointment.id}
+                              onClick={() => submitReview(appointment)}
+                              className="rounded-full bg-[#7c3aed] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                            >
+                              Submit
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 )}
                 {appointment.cancelReason && (
                   <span className="text-xs text-slate-400">Reason: {appointment.cancelReason}</span>

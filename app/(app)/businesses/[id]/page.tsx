@@ -2,8 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
-import { getBusinessById } from "@/lib/queries";
+import { getBusinessById, getReviews } from "@/lib/queries";
 import { BookingPanel } from "@/components/BookingPanel";
+import { FavoriteButton } from "@/components/FavoriteButton";
 
 export default async function BusinessDetailPage({
   params,
@@ -15,6 +16,7 @@ export default async function BusinessDetailPage({
   await connectDB();
   const business = await getBusinessById(id, session?.userId ?? "");
   if (!business) notFound();
+  const reviews = await getReviews(id, { page: 1, limit: 10 });
 
   return (
     <section className="space-y-5">
@@ -29,9 +31,12 @@ export default async function BusinessDetailPage({
               {business.category} · {business.location}
             </p>
           </div>
-          <span className="rounded-full bg-[#f5f3ff] px-3 py-1 text-sm font-semibold text-[#6d28d9]">
-            ★ {business.ratingAvg.toFixed(1)} ({business.ratingCount})
-          </span>
+          <div className="flex flex-col items-end gap-2">
+            <span className="rounded-full bg-[#f5f3ff] px-3 py-1 text-sm font-semibold text-[#6d28d9]">
+              ★ {business.ratingAvg.toFixed(1)} ({business.ratingCount})
+            </span>
+            <FavoriteButton businessId={business.id} initialFavorite={business.isFavorite} />
+          </div>
         </div>
         {business.description && (
           <p className="mt-4 text-sm leading-relaxed text-slate-600">{business.description}</p>
@@ -53,6 +58,30 @@ export default async function BusinessDetailPage({
                   </p>
                 </div>
                 <span className="font-semibold text-slate-800">${service.price}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold text-slate-800">Reviews</h2>
+        {reviews.items.length === 0 ? (
+          <p className="text-sm text-slate-500">No reviews yet.</p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {reviews.items.map((review) => (
+              <li key={review.id} className="py-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-amber-500">
+                    {"★".repeat(review.rating)}
+                    <span className="text-slate-300">{"★".repeat(5 - review.rating)}</span>
+                  </span>
+                  <span className="text-xs text-slate-500">{review.authorName}</span>
+                </div>
+                {review.comment && (
+                  <p className="mt-1 text-sm text-slate-600">{review.comment}</p>
+                )}
               </li>
             ))}
           </ul>
