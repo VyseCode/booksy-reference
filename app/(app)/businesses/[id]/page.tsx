@@ -2,7 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
-import { getBusinessById, getReviews } from "@/lib/queries";
+import {
+  getBusinessById,
+  getInitialBookingSlots,
+  getReviews,
+} from "@/lib/queries";
 import { BookingPanel } from "@/components/BookingPanel";
 import { FavoriteButton } from "@/components/FavoriteButton";
 
@@ -17,6 +21,8 @@ export default async function BusinessDetailPage({
   const business = await getBusinessById(id, session?.userId ?? "");
   if (!business) notFound();
   const reviews = await getReviews(id, { page: 1, limit: 10 });
+
+  const { slots: initialSlots } = await getInitialBookingSlots(business.id);
 
   return (
     <section className="space-y-5">
@@ -90,7 +96,11 @@ export default async function BusinessDetailPage({
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-lg font-semibold text-slate-800">Book an appointment</h2>
-        <BookingPanel businessId={business.id} services={business.services} />
+        <BookingPanel
+          businessId={business.id}
+          services={business.services}
+          initialSlots={initialSlots}
+        />
       </div>
 
       {business.isOwner && (

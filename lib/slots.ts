@@ -1,4 +1,4 @@
-import type { IOpeningHour } from "@/models/Business";
+type HoursLike = { day: number; open: string; close: string; closed: boolean };
 
 export const SLOT_MINUTES = 15;
 const MS_PER_MIN = 60_000;
@@ -40,7 +40,7 @@ export function slotKeysFor(start: Date, durationMin: number): string[] {
 }
 
 export function candidateSlots(
-  hours: IOpeningHour[],
+  hours: HoursLike[],
   dateKeyString: string,
   durationMin: number,
   now: Date = new Date(),

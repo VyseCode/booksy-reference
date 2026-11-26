@@ -4,6 +4,7 @@ import { Service } from "@/models/Service";
 import { Favorite } from "@/models/Favorite";
 import { Appointment } from "@/models/Appointment";
 import { Review } from "@/models/Review";
+import { availableSlots, candidateSlots } from "@/lib/slots";
 import type {
   AppointmentDTO,
   BusinessDTO,
@@ -13,6 +14,7 @@ import type {
   Paginated,
   ReviewDTO,
   ServiceDTO,
+  SlotDTO,
 } from "@/lib/types";
 
 type LeanBusiness = {
@@ -195,6 +197,38 @@ export async function getOwnerBusinesses(
   }));
 }
 
+export async function getInitialBookingSlots(
+  businessId: string,
+): Promise<{ date: string; slots: SlotDTO[] }> {
+  if (!Types.ObjectId.isValid(businessId)) return { date: "", slots: [] };
+  const date = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const [business, services] = await Promise.all([
+    Business.findById(businessId).select("openingHours").lean() as unknown as Promise<{
+      openingHours: Array<{
+        day: number;
+        open: string;
+        close: string;
+        closed: boolean;
+      }>;
+    } | null>,
+    Service.find({ business: businessId, active: true })
+      .sort({ createdAt: 1 })
+      .limit(1)
+      .lean() as unknown as Promise<LeanService[]>,
+  ]);
+  const first = services[0];
+  if (!business || !first) return { date, slots: [] };
+  const candidates = candidateSlots(business.openingHours, date, first.durationMin);
+  const booked = await getBookedSlotKeys(businessId, date);
+  return {
+    date,
+    slots: availableSlots(candidates, booked).map((slot) => ({
+      start: slot.start.toISOString(),
+      end: slot.end.toISOString(),
+    })),
+  };
+}
+
 export async function getServices(businessId: string): Promise<ServiceDTO[]> {
   if (!Types.ObjectId.isValid(businessId)) return [];
   const docs = (await Service.find({ business: businessId })
@@ -224,25 +258,24 @@ export async function applyReviewDelta(
   ratingDelta: number,
   countDelta: number,
 ): Promise<void> {
-  await Business.updateOne({ _id: businessId }, [
-    {
-      $set: {
-        ratingSum: { $max: [0, { $add: ["$ratingSum", ratingDelta] }] },
-        ratingCount: { $max: [0, { $add: ["$ratingCount", countDelta] }] },
-      },
-    },
-    {
-      $set: {
-        ratingAvg: {
-          $cond: [
-            { $gt: ["$ratingCount", 0] },
-            { $round: [{ $divide: ["$ratingSum", "$ratingCount"] }, 2] },
-            0,
-          ],
-        },
-      },
-    },
-  ], { updatePipeline: true });
+  const guard: Record<string, unknown> = {};
+  if (countDelta < 0) guard.ratingCount = { $gte: -countDelta };
+  if (ratingDelta < 0) guard.ratingSum = { $gte: -ratingDelta };
+
+  const updated = await Business.findOneAndUpdate(
+    { _id: businessId, ...guard },
+    { $inc: { ratingSum: ratingDelta, ratingCount: countDelta } },
+    { new: true },
+  )
+    .select("ratingSum ratingCount")
+    .lean();
+  if (!updated) return;
+
+  const average =
+    updated.ratingCount > 0
+      ? Math.round((updated.ratingSum / updated.ratingCount) * 100) / 100
+      : 0;
+  await Business.updateOne({ _id: businessId }, { $set: { ratingAvg: average } });
 }
 
 function toAppointmentDTO(

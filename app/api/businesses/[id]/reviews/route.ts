@@ -1,6 +1,5 @@
 import { Types } from "mongoose";
 import { z } from "zod";
-import { getSession } from "@/lib/auth";
 import { fail, handleError, ok } from "@/lib/api";
 import { connectDB } from "@/lib/db";
 import { Business } from "@/models/Business";

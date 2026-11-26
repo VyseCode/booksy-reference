@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { AppointmentDTO, ServiceDTO, SlotDTO } from "@/lib/types";
 
 function tomorrow(): string {
@@ -15,15 +15,17 @@ function timeOf(iso: string): string {
 export function BookingPanel({
   businessId,
   services,
+  initialSlots,
 }: {
   businessId: string;
   services: ServiceDTO[];
+  initialSlots: SlotDTO[];
 }) {
   const router = useRouter();
   const bookable = services.filter((service) => service.active);
   const [serviceId, setServiceId] = useState(bookable[0]?.id ?? "");
   const [date, setDate] = useState(tomorrow);
-  const [slots, setSlots] = useState<SlotDTO[]>([]);
+  const [slots, setSlots] = useState<SlotDTO[]>(initialSlots);
   const [selected, setSelected] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -49,11 +51,6 @@ export function BookingPanel({
       setBusy(false);
     }
   }
-
-  useEffect(() => {
-    void loadSlots();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serviceId, date]);
 
   async function book() {
     if (!selected) return;
@@ -93,7 +90,11 @@ export function BookingPanel({
           <select
             aria-label="Service to book"
             value={serviceId}
-            onChange={(event) => setServiceId(event.target.value)}
+            onChange={(event) => {
+              setServiceId(event.target.value);
+              setSlots([]);
+              setSelected("");
+            }}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           >
             {bookable.map((service) => (
@@ -111,7 +112,11 @@ export function BookingPanel({
             aria-label="Booking date"
             type="date"
             value={date}
-            onChange={(event) => setDate(event.target.value)}
+            onChange={(event) => {
+              setDate(event.target.value);
+              setSlots([]);
+              setSelected("");
+            }}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
