@@ -29,21 +29,35 @@ export function isAligned(date: Date): boolean {
   return date.getTime() % SLOT_MS === 0;
 }
 
-export function slotKeysFor(start: Date, durationMin: number): string[] {
+export function bufferSlots(minutes: number | undefined): number {
+  return Math.ceil(Math.max(0, minutes ?? 0) / SLOT_MINUTES) * SLOT_MINUTES;
+}
+
+export function slotKeysFor(
+  start: Date,
+  durationMin: number,
+  bufferBeforeMin = 0,
+  bufferAfterMin = 0,
+): string[] {
+  const before = bufferSlots(bufferBeforeMin);
+  const after = bufferSlots(bufferAfterMin);
   const keys: string[] = [];
-  const from = start.getTime();
-  const until = from + durationMin * MS_PER_MIN;
+  const from = start.getTime() - before * MS_PER_MIN;
+  const until = start.getTime() + (durationMin + after) * MS_PER_MIN;
   for (let time = from; time < until; time += SLOT_MS) {
     keys.push(new Date(time).toISOString());
   }
   return keys;
 }
 
+export type SlotBuffers = { beforeMin?: number; afterMin?: number };
+
 export function candidateSlots(
   hours: HoursLike[],
   dateKeyString: string,
   durationMin: number,
   now: Date = new Date(),
+  buffers: SlotBuffers = {},
 ): Slot[] {
   const base = dayStart(dateKeyString);
   if (Number.isNaN(base.getTime())) return [];
@@ -61,7 +75,11 @@ export function candidateSlots(
     const start = new Date(baseMs + minute * MS_PER_MIN);
     if (start.getTime() <= now.getTime()) continue;
     const end = new Date(baseMs + (minute + durationMin) * MS_PER_MIN);
-    slots.push({ start, end, keys: slotKeysFor(start, durationMin) });
+    slots.push({
+      start,
+      end,
+      keys: slotKeysFor(start, durationMin, buffers.beforeMin, buffers.afterMin),
+    });
   }
   return slots;
 }

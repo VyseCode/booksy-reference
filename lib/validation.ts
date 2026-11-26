@@ -36,19 +36,40 @@ export const createBusinessSchema = z.object({
   location: z.string().trim().min(1).max(120),
   images: z.array(z.string().trim().min(1)).max(10).default([]),
   openingHours: openingHoursSchema,
+  minLeadTimeHours: z.number().min(0).max(720).optional(),
+  cancellationCutoffHours: z.number().min(0).max(720).optional(),
 });
 
-export const updateBusinessSchema = createBusinessSchema.partial();
+export const updateBusinessSchema = z.object({
+  name: z.string().trim().min(2).max(100).optional(),
+  category: z.enum(BUSINESS_CATEGORIES).optional(),
+  description: z.string().trim().max(2000).optional(),
+  location: z.string().trim().min(1).max(120).optional(),
+  images: z.array(z.string().trim().min(1)).max(10).optional(),
+  openingHours: openingHoursSchema.optional(),
+  minLeadTimeHours: z.number().min(0).max(720).optional(),
+  cancellationCutoffHours: z.number().min(0).max(720).optional(),
+});
 
 export const createServiceSchema = z.object({
   name: z.string().trim().min(2).max(100),
   description: z.string().trim().max(500).default(""),
   durationMin: z.number().int().min(5).max(480),
   price: z.number().min(0).max(100000),
+  bufferBeforeMin: z.number().int().min(0).max(60).optional(),
+  bufferAfterMin: z.number().int().min(0).max(60).optional(),
   active: z.boolean().default(true),
 });
 
-export const updateServiceSchema = createServiceSchema.partial();
+export const updateServiceSchema = z.object({
+  name: z.string().trim().min(2).max(100).optional(),
+  description: z.string().trim().max(500).optional(),
+  durationMin: z.number().int().min(5).max(480).optional(),
+  price: z.number().min(0).max(100000).optional(),
+  bufferBeforeMin: z.number().int().min(0).max(60).optional(),
+  bufferAfterMin: z.number().int().min(0).max(60).optional(),
+  active: z.boolean().optional(),
+});
 
 export const bookAppointmentSchema = z.object({
   businessId: z.string().min(1),

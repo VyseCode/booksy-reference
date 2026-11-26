@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type {
@@ -58,6 +59,11 @@ export function OwnerDashboard({ businesses, schedule, revenue }: Props) {
   const [serviceNames, setServiceNames] = useState<Record<string, string>>({});
   const [serviceDurations, setServiceDurations] = useState<Record<string, string>>({});
   const [servicePrices, setServicePrices] = useState<Record<string, string>>({});
+  const [serviceBefore, setServiceBefore] = useState<Record<string, string>>({});
+  const [serviceAfter, setServiceAfter] = useState<Record<string, string>>({});
+  const [policyLead, setPolicyLead] = useState<Record<string, string>>({});
+  const [policyCutoff, setPolicyCutoff] = useState<Record<string, string>>({});
+  const [photoFiles, setPhotoFiles] = useState<Record<string, File | null>>({});
   const [date, setDate] = useState("");
   const [filterBusiness, setFilterBusiness] = useState("");
   const [error, setError] = useState("");
@@ -107,6 +113,8 @@ export function OwnerDashboard({ businesses, schedule, revenue }: Props) {
           description: "",
           durationMin,
           price,
+          bufferBeforeMin: Number(serviceBefore[businessId] ?? "0"),
+          bufferAfterMin: Number(serviceAfter[businessId] ?? "0"),
           active: true,
         },
       );
@@ -118,6 +126,8 @@ export function OwnerDashboard({ businesses, schedule, revenue }: Props) {
         ),
       );
       setServiceNames((current) => ({ ...current, [businessId]: "" }));
+      setServiceBefore((current) => ({ ...current, [businessId]: "0" }));
+      setServiceAfter((current) => ({ ...current, [businessId]: "0" }));
     } catch (err) {
       setError(message(err));
     } finally {
@@ -148,6 +158,85 @@ export function OwnerDashboard({ businesses, schedule, revenue }: Props) {
       router.refresh();
     } catch (err) {
       setError(message(err));
+    }
+  }
+
+  async function savePolicies(business: BusinessWithServices) {
+    setError("");
+    setBusy(true);
+    try {
+      const data = await api<{ business: BusinessWithServices }>(
+        `/api/businesses/${business.id}`,
+        "PATCH",
+        {
+          minLeadTimeHours: Number(policyLead[business.id] ?? business.minLeadTimeHours),
+          cancellationCutoffHours: Number(
+            policyCutoff[business.id] ?? business.cancellationCutoffHours,
+          ),
+        },
+      );
+      setItems((current) =>
+        current.map((item) => (item.id === business.id ? data.business : item)),
+      );
+      router.refresh();
+    } catch (err) {
+      setError(message(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function uploadPhoto(businessId: string) {
+    const file = photoFiles[businessId];
+    if (!file) return;
+    setError("");
+    setBusy(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const response = await fetch(`/api/businesses/${businessId}/images`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = (await response.json()) as {
+        business?: BusinessWithServices;
+        error?: string;
+      };
+      if (!response.ok) throw new Error(data.error ?? "Upload failed");
+      setItems((current) =>
+        current.map((item) =>
+          item.id === businessId
+            ? { ...item, images: data.business?.images ?? item.images }
+            : item,
+        ),
+      );
+      setPhotoFiles((current) => ({ ...current, [businessId]: null }));
+      router.refresh();
+    } catch (err) {
+      setError(message(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removePhoto(businessId: string, url: string) {
+    const uploadId = url.split("/").pop();
+    if (!uploadId) return;
+    setError("");
+    setBusy(true);
+    try {
+      const data = await api<{ business: BusinessWithServices }>(
+        `/api/businesses/${businessId}/images/${uploadId}`,
+        "DELETE",
+      );
+      setItems((current) =>
+        current.map((item) => (item.id === businessId ? data.business : item)),
+      );
+      router.refresh();
+    } catch (err) {
+      setError(message(err));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -344,6 +433,115 @@ export function OwnerDashboard({ businesses, schedule, revenue }: Props) {
                 </div>
 
                 <div className="mt-4">
+                  <h3 className="mb-2 text-sm font-semibold text-slate-700">Photos</h3>
+                  {business.images.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {business.images.map((url) => (
+                        <div
+                          key={url}
+                          className="relative h-16 w-20 overflow-hidden rounded bg-slate-100"
+                        >
+                          <Image
+                            src={url}
+                            alt={`${business.name} photo`}
+                            fill
+                            unoptimized
+                            sizes="80px"
+                            className="object-cover"
+                          />
+                          <button
+                            type="button"
+                            aria-label={`Remove photo from ${business.name}`}
+                            onClick={() => removePhoto(business.id, url)}
+                            className="absolute right-0 top-0 rounded-bl bg-white/90 px-1.5 text-xs text-red-600 hover:underline"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      aria-label={`Photo for ${business.name}`}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      onChange={(event) =>
+                        setPhotoFiles((current) => ({
+                          ...current,
+                          [business.id]: event.target.files?.[0] ?? null,
+                        }))
+                      }
+                      className="text-xs"
+                    />
+                    <button
+                      type="button"
+                      disabled={busy || !photoFiles[business.id]}
+                      onClick={() => uploadPhoto(business.id)}
+                      className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-60"
+                    >
+                      Upload photo
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <h3 className="mb-2 text-sm font-semibold text-slate-700">
+                    Booking policies
+                  </h3>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div>
+                      <label className="mb-1 block text-xs text-slate-600">
+                        Minimum lead time (hours)
+                      </label>
+                      <input
+                        aria-label={`Minimum lead time for ${business.name}`}
+                        type="number"
+                        min={0}
+                        max={720}
+                        value={policyLead[business.id] ?? String(business.minLeadTimeHours)}
+                        onChange={(event) =>
+                          setPolicyLead((current) => ({
+                            ...current,
+                            [business.id]: event.target.value,
+                          }))
+                        }
+                        className="w-28 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-slate-600">
+                        Cancellation cutoff (hours)
+                      </label>
+                      <input
+                        aria-label={`Cancellation cutoff for ${business.name}`}
+                        type="number"
+                        min={0}
+                        max={720}
+                        value={
+                          policyCutoff[business.id] ?? String(business.cancellationCutoffHours)
+                        }
+                        onChange={(event) =>
+                          setPolicyCutoff((current) => ({
+                            ...current,
+                            [business.id]: event.target.value,
+                          }))
+                        }
+                        className="w-28 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => savePolicies(business)}
+                      className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-60"
+                    >
+                      Save policies
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4">
                   <h3 className="mb-2 text-sm font-semibold text-slate-700">Services</h3>
                   {business.services.length === 0 && (
                     <p className="text-xs text-slate-500">No services yet.</p>
@@ -356,6 +554,8 @@ export function OwnerDashboard({ businesses, schedule, revenue }: Props) {
                       >
                         <span>
                           {service.name} · {service.durationMin} min · ${service.price}
+                          {(service.bufferBeforeMin > 0 || service.bufferAfterMin > 0) &&
+                            ` · buffer ${service.bufferBeforeMin}/${service.bufferAfterMin} min`}
                           {!service.active && " (inactive)"}
                         </span>
                         <button
@@ -396,6 +596,34 @@ export function OwnerDashboard({ businesses, schedule, revenue }: Props) {
                       value={servicePrices[business.id] ?? "0"}
                       onChange={(event) =>
                         setServicePrices((current) => ({ ...current, [business.id]: event.target.value }))
+                      }
+                      className="w-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    />
+                    <input
+                      aria-label="Buffer before in minutes"
+                      type="number"
+                      min={0}
+                      max={60}
+                      value={serviceBefore[business.id] ?? "0"}
+                      onChange={(event) =>
+                        setServiceBefore((current) => ({
+                          ...current,
+                          [business.id]: event.target.value,
+                        }))
+                      }
+                      className="w-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    />
+                    <input
+                      aria-label="Buffer after in minutes"
+                      type="number"
+                      min={0}
+                      max={60}
+                      value={serviceAfter[business.id] ?? "0"}
+                      onChange={(event) =>
+                        setServiceAfter((current) => ({
+                          ...current,
+                          [business.id]: event.target.value,
+                        }))
                       }
                       className="w-24 rounded-md border border-slate-300 px-3 py-2 text-sm"
                     />

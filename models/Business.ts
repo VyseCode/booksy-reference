@@ -34,6 +34,8 @@ export interface IBusiness {
   location: string;
   images: string[];
   openingHours: IOpeningHour[];
+  minLeadTimeHours: number;
+  cancellationCutoffHours: number;
   ratingSum: number;
   ratingCount: number;
   ratingAvg: number;
@@ -70,6 +72,8 @@ const businessSchema = new Schema<IBusiness>(
     location: { type: String, required: true, trim: true, maxlength: 120 },
     images: { type: [String], default: [] },
     openingHours: { type: [openingHourSchema], default: [] },
+    minLeadTimeHours: { type: Number, default: 2, min: 0, max: 720 },
+    cancellationCutoffHours: { type: Number, default: 4, min: 0, max: 720 },
     ratingSum: { type: Number, default: 0, min: 0 },
     ratingCount: { type: Number, default: 0, min: 0 },
     ratingAvg: { type: Number, default: 0, min: 0, max: 5 },

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
@@ -48,6 +49,29 @@ export default async function BusinessDetailPage({
           <p className="mt-4 text-sm leading-relaxed text-slate-600">{business.description}</p>
         )}
       </div>
+
+      {business.images.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-3 text-lg font-semibold text-slate-800">Photos</h2>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {business.images.map((src) => (
+              <div
+                key={src}
+                className="relative aspect-[4/3] overflow-hidden rounded-lg bg-slate-100"
+              >
+                <Image
+                  src={src}
+                  alt={`${business.name} photo`}
+                  fill
+                  unoptimized
+                  sizes="(max-width: 640px) 100vw, 33vw"
+                  className="object-cover"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="mb-3 text-lg font-semibold text-slate-800">Services</h2>
@@ -100,6 +124,8 @@ export default async function BusinessDetailPage({
           businessId={business.id}
           services={business.services}
           initialSlots={initialSlots}
+          minLeadTimeHours={business.minLeadTimeHours}
+          cancellationCutoffHours={business.cancellationCutoffHours}
         />
       </div>
 

@@ -6,6 +6,7 @@ import { Business } from "@/models/Business";
 import { Service } from "@/models/Service";
 import { availableSlots, candidateSlots } from "@/lib/slots";
 import { getBookedSlotKeys } from "@/lib/queries";
+import { meetsLeadTime } from "@/lib/policies";
 
 const paramsSchema = z.object({
   id: z.string().refine((value) => Types.ObjectId.isValid(value), "Invalid business id"),
@@ -31,19 +32,25 @@ export async function GET(
     await connectDB();
 
     const business = await Business.findById(id)
-      .select("openingHours")
+      .select("openingHours minLeadTimeHours")
       .lean();
     if (!business) return fail("Business not found", 404);
 
     const service = await Service.findById(query.serviceId)
-      .select("business durationMin active")
+      .select("business durationMin active bufferBeforeMin bufferAfterMin")
       .lean();
     if (!service || service.business.toString() !== id) {
       return fail("Service not found for this business", 404);
     }
     if (!service.active) return fail("This service is not bookable", 400);
 
-    const candidates = candidateSlots(business.openingHours, query.date, service.durationMin);
+    const candidates = candidateSlots(
+      business.openingHours,
+      query.date,
+      service.durationMin,
+      new Date(),
+      { beforeMin: service.bufferBeforeMin, afterMin: service.bufferAfterMin },
+    ).filter((slot) => meetsLeadTime(slot.start, business.minLeadTimeHours ?? 2));
     const booked = await getBookedSlotKeys(id, query.date);
     const slots = availableSlots(candidates, booked).map((slot) => ({
       start: slot.start.toISOString(),

@@ -49,6 +49,8 @@ export async function PATCH(
         description: updated?.description ?? "",
         durationMin: updated?.durationMin ?? 0,
         price: updated?.price ?? 0,
+        bufferBeforeMin: updated?.bufferBeforeMin ?? 0,
+        bufferAfterMin: updated?.bufferAfterMin ?? 0,
         active: updated?.active ?? false,
       },
     });

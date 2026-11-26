@@ -7,6 +7,8 @@ export interface IService {
   description: string;
   durationMin: number;
   price: number;
+  bufferBeforeMin: number;
+  bufferAfterMin: number;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -24,6 +26,8 @@ const serviceSchema = new Schema<IService>(
     description: { type: String, default: "", maxlength: 500 },
     durationMin: { type: Number, required: true, min: 5, max: 480 },
     price: { type: Number, required: true, min: 0, max: 100000 },
+    bufferBeforeMin: { type: Number, default: 0, min: 0, max: 60 },
+    bufferAfterMin: { type: Number, default: 0, min: 0, max: 60 },
     active: { type: Boolean, default: true },
   },
   { timestamps: true },
