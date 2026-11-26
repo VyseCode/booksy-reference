@@ -5,6 +5,7 @@ import { Favorite } from "@/models/Favorite";
 import { Appointment } from "@/models/Appointment";
 import { Review } from "@/models/Review";
 import { availableSlots, candidateSlots } from "@/lib/slots";
+import { meetsLeadTime } from "@/lib/policies";
 import type {
   AppointmentDTO,
   BusinessDTO,
@@ -31,6 +32,8 @@ type LeanBusiness = {
     close: string;
     closed: boolean;
   }>;
+  minLeadTimeHours?: number;
+  cancellationCutoffHours?: number;
   ratingAvg: number;
   ratingCount: number;
   createdAt: Date;
@@ -43,6 +46,8 @@ type LeanService = {
   description: string;
   durationMin: number;
   price: number;
+  bufferBeforeMin?: number;
+  bufferAfterMin?: number;
   active: boolean;
 };
 
@@ -89,6 +94,8 @@ function toBusinessDTO(
       close: hour.close,
       closed: hour.closed,
     })),
+    minLeadTimeHours: doc.minLeadTimeHours ?? 2,
+    cancellationCutoffHours: doc.cancellationCutoffHours ?? 4,
     ratingAvg: doc.ratingAvg ?? 0,
     ratingCount: doc.ratingCount ?? 0,
     isOwner: doc.owner.toString() === viewerId,
@@ -105,6 +112,8 @@ function toServiceDTO(doc: LeanService): ServiceDTO {
     description: doc.description ?? "",
     durationMin: doc.durationMin,
     price: doc.price,
+    bufferBeforeMin: doc.bufferBeforeMin ?? 0,
+    bufferAfterMin: doc.bufferAfterMin ?? 0,
     active: doc.active,
   };
 }
@@ -203,13 +212,14 @@ export async function getInitialBookingSlots(
   if (!Types.ObjectId.isValid(businessId)) return { date: "", slots: [] };
   const date = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const [business, services] = await Promise.all([
-    Business.findById(businessId).select("openingHours").lean() as unknown as Promise<{
+    Business.findById(businessId).select("openingHours minLeadTimeHours").lean() as unknown as Promise<{
       openingHours: Array<{
         day: number;
         open: string;
         close: string;
         closed: boolean;
       }>;
+      minLeadTimeHours?: number;
     } | null>,
     Service.find({ business: businessId, active: true })
       .sort({ createdAt: 1 })
@@ -218,7 +228,13 @@ export async function getInitialBookingSlots(
   ]);
   const first = services[0];
   if (!business || !first) return { date, slots: [] };
-  const candidates = candidateSlots(business.openingHours, date, first.durationMin);
+  const candidates = candidateSlots(
+    business.openingHours,
+    date,
+    first.durationMin,
+    new Date(),
+    { beforeMin: first.bufferBeforeMin, afterMin: first.bufferAfterMin },
+  ).filter((slot) => meetsLeadTime(slot.start, business.minLeadTimeHours ?? 2));
   const booked = await getBookedSlotKeys(businessId, date);
   return {
     date,

@@ -8,6 +8,7 @@ import { Service } from "@/models/Service";
 import { Appointment } from "@/models/Appointment";
 import { bookAppointmentSchema } from "@/lib/validation";
 import { candidateSlots, dateKey, isAligned } from "@/lib/slots";
+import { meetsLeadTime } from "@/lib/policies";
 import {
   getAppointmentById,
   getBookedSlotKeys,
@@ -38,12 +39,19 @@ export async function POST(request: Request) {
 
     await connectDB();
     const business = await Business.findById(body.businessId)
-      .select("openingHours")
+      .select("openingHours minLeadTimeHours")
       .lean();
     if (!business) return fail("Business not found", 404);
+    const minLeadTimeHours = business.minLeadTimeHours ?? 2;
+    if (!meetsLeadTime(start, minLeadTimeHours)) {
+      return fail(
+        `Appointments must be booked at least ${minLeadTimeHours} hour${minLeadTimeHours === 1 ? "" : "s"} in advance`,
+        400,
+      );
+    }
 
     const service = await Service.findById(body.serviceId)
-      .select("business durationMin price active")
+      .select("business durationMin price active bufferBeforeMin bufferAfterMin")
       .lean();
     if (!service || service.business.toString() !== body.businessId) {
       return fail("Service not found for this business", 404);
@@ -55,6 +63,8 @@ export async function POST(request: Request) {
       business.openingHours,
       day,
       service.durationMin,
+      new Date(),
+      { beforeMin: service.bufferBeforeMin, afterMin: service.bufferAfterMin },
     );
     const chosen = candidates.find(
       (slot) => slot.start.getTime() === start.getTime(),

@@ -12,18 +12,27 @@ function timeOf(iso: string): string {
   return iso.slice(11, 16);
 }
 
+function hoursLabel(value: number): string {
+  return `${value} hour${value === 1 ? "" : "s"}`;
+}
+
 export function BookingPanel({
   businessId,
   services,
   initialSlots,
+  minLeadTimeHours,
+  cancellationCutoffHours,
 }: {
   businessId: string;
   services: ServiceDTO[];
   initialSlots: SlotDTO[];
+  minLeadTimeHours: number;
+  cancellationCutoffHours: number;
 }) {
   const router = useRouter();
   const bookable = services.filter((service) => service.active);
   const [serviceId, setServiceId] = useState(bookable[0]?.id ?? "");
+  const chosenService = bookable.find((service) => service.id === serviceId);
   const [date, setDate] = useState(tomorrow);
   const [slots, setSlots] = useState<SlotDTO[]>(initialSlots);
   const [selected, setSelected] = useState("");
@@ -100,6 +109,8 @@ export function BookingPanel({
             {bookable.map((service) => (
               <option key={service.id} value={service.id}>
                 {service.name} · {service.durationMin} min · ${service.price}
+                {service.bufferBeforeMin + service.bufferAfterMin > 0 &&
+                  ` · +${service.bufferBeforeMin + service.bufferAfterMin} min buffer`}
               </option>
             ))}
           </select>
@@ -120,6 +131,21 @@ export function BookingPanel({
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           />
         </div>
+      </div>
+
+      <div className="mb-4 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        <p className="font-semibold text-slate-700">Booking policies</p>
+        <p>
+          Book at least {hoursLabel(minLeadTimeHours)} in advance. Customers can cancel up to{" "}
+          {hoursLabel(cancellationCutoffHours)} before the appointment.
+        </p>
+        {chosenService &&
+          (chosenService.bufferBeforeMin > 0 || chosenService.bufferAfterMin > 0) && (
+            <p>
+              This service reserves {chosenService.bufferBeforeMin} min before and{" "}
+              {chosenService.bufferAfterMin} min after for preparation.
+            </p>
+          )}
       </div>
 
       <button

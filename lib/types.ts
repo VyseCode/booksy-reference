@@ -14,6 +14,8 @@ export type BusinessDTO = {
   location: string;
   images: string[];
   openingHours: OpeningHourDTO[];
+  minLeadTimeHours: number;
+  cancellationCutoffHours: number;
   ratingAvg: number;
   ratingCount: number;
   isOwner: boolean;
@@ -28,6 +30,8 @@ export type ServiceDTO = {
   description: string;
   durationMin: number;
   price: number;
+  bufferBeforeMin: number;
+  bufferAfterMin: number;
   active: boolean;
 };
 

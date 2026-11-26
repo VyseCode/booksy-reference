@@ -66,7 +66,13 @@ const appointmentSchema = new Schema<IAppointment>(
   { timestamps: true },
 );
 
-appointmentSchema.index({ business: 1, slotKeys: 1 }, { unique: true });
+appointmentSchema.index(
+  { business: 1, slotKeys: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { "slotKeys.0": { $exists: true } },
+  },
+);
 appointmentSchema.index({ customer: 1, start: -1 });
 appointmentSchema.index({ business: 1, start: 1 });
 appointmentSchema.index({ status: 1, start: 1 });

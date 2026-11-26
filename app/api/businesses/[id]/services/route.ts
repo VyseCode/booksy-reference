@@ -53,6 +53,8 @@ export async function POST(
           description: service.description,
           durationMin: service.durationMin,
           price: service.price,
+          bufferBeforeMin: service.bufferBeforeMin,
+          bufferAfterMin: service.bufferAfterMin,
           active: service.active,
         },
       },

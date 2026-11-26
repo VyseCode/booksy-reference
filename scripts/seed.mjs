@@ -24,6 +24,8 @@ const businessSchema = new mongoose.Schema(
     location: String,
     images: [String],
     openingHours: [{ day: Number, open: String, close: String, closed: Boolean }],
+    minLeadTimeHours: { type: Number, default: 2 },
+    cancellationCutoffHours: { type: Number, default: 4 },
     ratingSum: { type: Number, default: 0 },
     ratingCount: { type: Number, default: 0 },
     ratingAvg: { type: Number, default: 0 },
@@ -42,6 +44,8 @@ const serviceSchema = new mongoose.Schema(
     description: String,
     durationMin: Number,
     price: Number,
+    bufferBeforeMin: { type: Number, default: 0 },
+    bufferAfterMin: { type: Number, default: 0 },
     active: Boolean,
   },
   { timestamps: true },
@@ -64,7 +68,10 @@ const appointmentSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
-appointmentSchema.index({ business: 1, slotKeys: 1 }, { unique: true });
+appointmentSchema.index(
+  { business: 1, slotKeys: 1 },
+  { unique: true, partialFilterExpression: { "slotKeys.0": { $exists: true } } },
+);
 appointmentSchema.index({ customer: 1, start: -1 });
 appointmentSchema.index({ business: 1, start: 1 });
 appointmentSchema.index({ status: 1, start: 1 });
@@ -88,13 +95,23 @@ const favoriteSchema = new mongoose.Schema(
 );
 favoriteSchema.index({ user: 1, business: 1 }, { unique: true });
 
+const uploadSchema = new mongoose.Schema(
+  {
+    contentType: String,
+    size: Number,
+    data: Buffer,
+  },
+  { timestamps: { createdAt: true, updatedAt: false } },
+);
+
 const User = mongoose.model("User", userSchema);
 const Business = mongoose.model("Business", businessSchema);
 const Service = mongoose.model("Service", serviceSchema);
 const Appointment = mongoose.model("Appointment", appointmentSchema);
 const Review = mongoose.model("Review", reviewSchema);
 const Favorite = mongoose.model("Favorite", favoriteSchema);
-const MODELS = [User, Business, Service, Appointment, Review, Favorite];
+const Upload = mongoose.model("Upload", uploadSchema);
+const MODELS = [User, Business, Service, Appointment, Review, Favorite, Upload];
 
 function minutes(time) {
   const [hours, mins] = time.split(":").map(Number);
@@ -108,10 +125,12 @@ function dateKey(offsetDays) {
   return date.toISOString().slice(0, 10);
 }
 
-function slotKeysFor(start, durationMin) {
+function slotKeysFor(start, durationMin, beforeMin = 0, afterMin = 0) {
+  const before = Math.ceil(Math.max(0, beforeMin) / 15) * 15;
+  const after = Math.ceil(Math.max(0, afterMin) / 15) * 15;
   const keys = [];
-  const from = start.getTime();
-  const until = from + durationMin * 60 * 1000;
+  const from = start.getTime() - before * 60 * 1000;
+  const until = from + (durationMin + before + after) * 60 * 1000;
   for (let time = from; time < until; time += SLOT_MS) {
     keys.push(new Date(time).toISOString());
   }
@@ -149,6 +168,7 @@ async function main() {
     throw new Error("Refusing to seed a database other than booksy_ref");
   }
   await mongoose.connect(URI);
+  await Appointment.collection.dropIndex("business_1_slotKeys_1").catch(() => {});
   await Promise.all(MODELS.map((model) => model.createIndexes()));
   await Promise.all(MODELS.map((model) => model.deleteMany({})));
 
@@ -174,6 +194,8 @@ async function main() {
       location: "Austin, TX",
       images: [],
       openingHours: hours("09:00", "19:00", [0]),
+      minLeadTimeHours: 2,
+      cancellationCutoffHours: 4,
     },
     {
       owner: ava._id,
@@ -183,6 +205,8 @@ async function main() {
       location: "Austin, TX",
       images: [],
       openingHours: hours("10:00", "20:00", [0, 1]),
+      minLeadTimeHours: 4,
+      cancellationCutoffHours: 12,
     },
     {
       owner: mia._id,
@@ -192,6 +216,8 @@ async function main() {
       location: "Denver, CO",
       images: [],
       openingHours: hours("08:00", "17:00", [0, 6]),
+      minLeadTimeHours: 24,
+      cancellationCutoffHours: 12,
     },
     {
       owner: zoe._id,
@@ -201,6 +227,8 @@ async function main() {
       location: "Austin, TX",
       images: [],
       openingHours: hours("09:00", "18:00"),
+      minLeadTimeHours: 12,
+      cancellationCutoffHours: 24,
     },
     {
       owner: mia._id,
@@ -210,34 +238,40 @@ async function main() {
       location: "Denver, CO",
       images: [],
       openingHours: hours("06:00", "22:00"),
+      minLeadTimeHours: 1,
+      cancellationCutoffHours: 2,
     },
   ]);
   const [glow, barbers, clinic, spa, fitness] = businesses;
 
   const serviceRows = [
-    [glow, "Cut & Style", 45, 55],
-    [glow, "Balayage", 120, 150],
-    [glow, "Blowout", 30, 35],
-    [barbers, "Classic Cut", 30, 30],
-    [barbers, "Beard Trim", 15, 15],
-    [barbers, "Cut & Beard", 45, 42],
-    [clinic, "Consultation", 30, 40],
-    [clinic, "Therapy Session", 60, 95],
-    [spa, "Swedish Massage", 60, 90],
-    [spa, "Deep Tissue", 90, 120],
-    [spa, "Facial", 45, 70],
-    [fitness, "PT Session", 60, 75],
-    [fitness, "Class Drop-in", 45, 20],
+    [glow, "Cut & Style", 45, 55, 0, 0],
+    [glow, "Balayage", 120, 150, 15, 15],
+    [glow, "Blowout", 30, 35, 0, 0],
+    [barbers, "Classic Cut", 30, 30, 0, 0],
+    [barbers, "Beard Trim", 15, 15, 0, 0],
+    [barbers, "Cut & Beard", 45, 42, 0, 0],
+    [clinic, "Consultation", 30, 40, 0, 0],
+    [clinic, "Therapy Session", 60, 95, 15, 0],
+    [spa, "Swedish Massage", 60, 90, 0, 0],
+    [spa, "Deep Tissue", 90, 120, 0, 15],
+    [spa, "Facial", 45, 70, 0, 0],
+    [fitness, "PT Session", 60, 75, 0, 0],
+    [fitness, "Class Drop-in", 45, 20, 0, 0],
   ];
   const services = await Service.create(
-    serviceRows.map(([business, name, durationMin, price]) => ({
-      business: business._id,
-      name,
-      description: `${name} appointment`,
-      durationMin,
-      price,
-      active: true,
-    })),
+    serviceRows.map(
+      ([business, name, durationMin, price, bufferBeforeMin, bufferAfterMin]) => ({
+        business: business._id,
+        name,
+        description: `${name} appointment`,
+        durationMin,
+        price,
+        bufferBeforeMin,
+        bufferAfterMin,
+        active: true,
+      }),
+    ),
   );
   const service = (business, name) =>
     services.find(
@@ -274,7 +308,9 @@ async function main() {
         durationMin: item.durationMin,
         price: item.price,
         status,
-        slotKeys: cancelled ? [] : slotKeysFor(start, item.durationMin),
+        slotKeys: cancelled
+          ? []
+          : slotKeysFor(start, item.durationMin, item.bufferBeforeMin, item.bufferAfterMin),
         cancelReason: reason,
       };
     }),

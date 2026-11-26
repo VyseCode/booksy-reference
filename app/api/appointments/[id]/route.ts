@@ -7,6 +7,7 @@ import { Business } from "@/models/Business";
 import { Appointment } from "@/models/Appointment";
 import { appointmentActionSchema } from "@/lib/validation";
 import { getAppointmentById } from "@/lib/queries";
+import { withinCancellationCutoff } from "@/lib/policies";
 
 const paramsSchema = z.object({
   id: z.string().refine((value) => Types.ObjectId.isValid(value), "Invalid appointment id"),
@@ -49,7 +50,7 @@ export async function PATCH(
 
     await connectDB();
     const appointment = await Appointment.findById(id).select(
-      "business customer status",
+      "business customer status start",
     );
     if (!appointment) return fail("Appointment not found", 404);
 
@@ -77,6 +78,18 @@ export async function PATCH(
     } else {
       if (!["pending", "confirmed"].includes(appointment.status)) {
         return fail("This appointment can no longer be cancelled", 409);
+      }
+      if (isCustomer && !isOwner) {
+        const policy = await Business.findById(appointment.business)
+          .select("cancellationCutoffHours")
+          .lean();
+        const hours = policy?.cancellationCutoffHours ?? 4;
+        if (withinCancellationCutoff(new Date(appointment.start), hours)) {
+          return fail(
+            `Appointments must be cancelled at least ${hours} hour${hours === 1 ? "" : "s"} before they start`,
+            409,
+          );
+        }
       }
       appointment.status = "cancelled";
       appointment.cancelReason = body.reason ?? "";
